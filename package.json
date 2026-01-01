@@ -1,0 +1,17 @@
+{
+  "name": "pictomania-online",
+  "version": "1.0.0",
+  "description": "妙筆神猜（Pictomania）線上多人遊戲",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "keywords": ["pictomania", "drawing", "game", "multiplayer", "websocket"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0"
+  }
+}
