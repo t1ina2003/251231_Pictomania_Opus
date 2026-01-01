@@ -237,7 +237,32 @@ input[type="number"]:focus {
 
 .lobby-container .subtitle {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
+}
+
+/* 音效控制按鈕 */
+.sound-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.sound-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  background: var(--bg-elevated);
+  font-size: 20px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sound-btn:hover {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.2);
+  transform: scale(1.1);
 }
 
 .lobby-actions {

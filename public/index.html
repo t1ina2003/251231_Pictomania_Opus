@@ -29,6 +29,11 @@
       <h1 class="game-title">🎨 妙筆神猜</h1>
       <p class="subtitle">與朋友一起繪畫猜謎！</p>
 
+      <div class="sound-controls">
+        <button id="toggle-sound-btn" class="sound-btn" title="音效">🔊</button>
+        <button id="toggle-music-btn" class="sound-btn" title="音樂">🎵</button>
+      </div>
+
       <div class="lobby-actions">
         <div class="input-group">
           <label for="player-name">你的名字</label>
@@ -211,6 +216,7 @@
   <!-- Toast 通知 -->
   <div id="toast-container"></div>
 
+  <script src="js/sound.js"></script>
   <script src="js/socket.js"></script>
   <script src="js/canvas.js"></script>
   <script src="js/game.js"></script>

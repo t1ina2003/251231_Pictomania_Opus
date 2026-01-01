@@ -108,6 +108,7 @@ function setupSocketHandlers() {
   socket.on('leftRoom', () => {
     game.reset();
     showScreen('lobby-screen');
+    sound.playMusic('lobby');
   });
 
   // 繪畫階段開始
@@ -115,37 +116,51 @@ function setupSocketHandlers() {
     game.startDrawingPhase(data);
     showScreen('game-screen');
     showToast(`第 ${data.round} 回合 - 開始繪畫！(80秒)`, 'success');
+    sound.playSound('roundStart');
+    sound.playMusic('drawing');
   });
 
   // 玩家完成繪圖
   socket.on('playerFinishedDrawing', (data) => {
     game.playerFinishedDrawing(data);
+    sound.playSound('success');
   });
 
   // 猜測階段開始
   socket.on('guessingPhaseStarted', (data) => {
     game.startGuessingPhase(data);
     showToast(`現在猜測 ${data.targetPlayerName} 的作品！`, 'info');
+    sound.playMusic('guessing');
   });
 
   // 猜測已提交
   socket.on('guessSubmitted', (data) => {
     game.guessSubmitted(data.isCorrect);
+    if (data.isCorrect) {
+      sound.playSound('correct');
+    } else {
+      sound.playSound('wrong');
+    }
   });
 
   // 猜測結束（顯示結果）
   socket.on('guessingEnded', (data) => {
     game.showGuessingResult(data);
+    sound.playMusic('results');
   });
 
   // 回合結束
   socket.on('roundEnded', (data) => {
     game.showRoundResult(data);
+    sound.playSound('roundEnd');
+    sound.playMusic('results');
   });
 
   // 遊戲結束
   socket.on('gameEnded', (data) => {
     game.showFinalResult(data.rankings);
+    sound.playSound('gameEnd');
+    sound.stopMusic();
   });
 }
 
@@ -154,11 +169,34 @@ function setupSocketHandlers() {
 // ===================================
 
 function setupUIHandlers() {
+  // 音效控制按鈕
+  document.getElementById('toggle-sound-btn').addEventListener('click', () => {
+    const enabled = sound.toggleSound();
+    document.getElementById('toggle-sound-btn').textContent = enabled ? '🔊' : '🔇';
+    sound.playSound('click');
+  });
+
+  document.getElementById('toggle-music-btn').addEventListener('click', () => {
+    const enabled = sound.toggleMusic();
+    document.getElementById('toggle-music-btn').textContent = enabled ? '🎵' : '🎵❌';
+    if (enabled) {
+      sound.playMusic('lobby');
+    }
+  });
+
+  // 為所有按鈕添加點擊音效
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sound.playSound('click');
+    });
+  });
+
   // 難度選擇
   document.querySelectorAll('.diff-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      sound.playSound('click');
     });
   });
 
