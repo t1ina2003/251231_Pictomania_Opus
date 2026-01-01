@@ -8,38 +8,38 @@
   --primary: #6366f1;
   --primary-light: #818cf8;
   --primary-dark: #4f46e5;
-  
+
   /* 輔助色 */
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
   --info: #3b82f6;
-  
+
   /* 背景色 */
   --bg-dark: #0f0f1a;
   --bg-card: #1a1a2e;
   --bg-elevated: #252542;
-  
+
   /* 文字色 */
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
-  
+
   /* 邊框 */
   --border-color: #334155;
-  
+
   /* 陰影 */
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
   --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.3);
-  
+
   /* 圓角 */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
-  
+
   /* 動畫 */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.3s ease;
@@ -77,8 +77,15 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .btn {
@@ -201,7 +208,9 @@ input[type="number"]:focus {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-text {
@@ -882,9 +891,17 @@ input[type="range"] {
   min-width: 48px;
 }
 
-.ranking-position.gold { color: #fbbf24; }
-.ranking-position.silver { color: #94a3b8; }
-.ranking-position.bronze { color: #cd7f32; }
+.ranking-position.gold {
+  color: #fbbf24;
+}
+
+.ranking-position.silver {
+  color: #94a3b8;
+}
+
+.ranking-position.bronze {
+  color: #cd7f32;
+}
 
 .ranking-player {
   flex: 1;
@@ -1008,19 +1025,289 @@ input[type="range"] {
   max-width: 320px;
 }
 
-.toast.success { border-left-color: var(--success); }
-.toast.error { border-left-color: var(--danger); }
-.toast.warning { border-left-color: var(--warning); }
+.toast.success {
+  border-left-color: var(--success);
+}
+
+.toast.error {
+  border-left-color: var(--danger);
+}
+
+.toast.warning {
+  border-left-color: var(--warning);
+}
 
 @keyframes slideIn {
   from {
     opacity: 0;
     transform: translateX(100%);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
   }
+}
+
+/* ===================================
+   階段標題
+=================================== */
+
+.phase-header {
+  text-align: center;
+  padding: 16px;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+}
+
+.phase-header h2 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.phase-header p {
+  color: var(--text-secondary);
+}
+
+/* ===================================
+   遊戲區域
+=================================== */
+
+.game-section {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.my-canvas-section {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.canvas-wrapper.large {
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+#display-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ===================================
+   猜測區域
+=================================== */
+
+.guessing-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .guessing-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.display-canvas-section {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.guess-panel {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 20px;
+}
+
+.guess-prompt {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+}
+
+.guess-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.guess-option-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.guess-option-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.guess-option-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.guess-option-btn.selected {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.guess-number {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary-light);
+  min-width: 28px;
+}
+
+.guess-word {
+  font-size: 15px;
+}
+
+.guess-feedback {
+  text-align: center;
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: var(--radius-md);
+}
+
+.guess-feedback .correct {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.guess-feedback .wrong {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.waiting-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
+
+.waiting-message p {
+  margin: 8px 0;
+}
+
+/* ===================================
+   猜測結果
+=================================== */
+
+.guessing-results {
+  padding: 16px 0;
+}
+
+.correct-answer {
+  text-align: center;
+  font-size: 18px;
+  padding: 16px;
+  background: rgba(16, 185, 129, 0.2);
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  color: var(--success);
+}
+
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--border-color);
+}
+
+.result-item.correct {
+  border-left-color: var(--success);
+}
+
+.result-item.wrong {
+  border-left-color: var(--danger);
+}
+
+.result-item.skipped {
+  border-left-color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.result-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.result-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.result-name {
+  font-weight: 500;
+}
+
+.result-guess {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.result-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-icon {
+  font-size: 18px;
+}
+
+.result-item.correct .status-icon {
+  color: var(--success);
+}
+
+.result-item.wrong .status-icon {
+  color: var(--danger);
+}
+
+.status-text {
+  font-weight: 600;
+}
+
+.result-item.correct .status-text {
+  color: var(--success);
+}
+
+.result-item.wrong .status-text {
+  color: var(--danger);
 }
 
 /* ===================================
@@ -1031,7 +1318,7 @@ input[type="range"] {
   .game-title {
     font-size: 32px;
   }
-  
+
   .lobby-container,
   .room-container,
   .result-container,
@@ -1039,52 +1326,48 @@ input[type="range"] {
     padding: 24px;
     margin: 10px;
   }
-  
+
   .game-header {
     flex-wrap: wrap;
     gap: 12px;
   }
-  
+
   .timer-container {
     order: -1;
     max-width: none;
     flex-basis: 100%;
   }
-  
+
   .players-list {
     grid-template-columns: 1fr;
   }
-  
+
   .difficulty-options {
     flex-wrap: wrap;
   }
-  
+
   .diff-btn {
     min-width: calc(50% - 4px);
   }
-  
+
   .words-list {
     flex-direction: column;
   }
-  
+
   .word-item {
     width: 100%;
   }
-  
-  .others-canvases {
-    grid-template-columns: repeat(2, 1fr);
+
+  .guess-options {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 480px) {
-  .others-canvases {
-    grid-template-columns: 1fr;
-  }
-  
   .room-actions {
     flex-direction: column;
   }
-  
+
   .end-actions {
     flex-direction: column;
   }

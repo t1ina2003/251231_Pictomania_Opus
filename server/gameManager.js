@@ -1,6 +1,11 @@
 /**
  * 遊戲管理器
  * 負責遊戲邏輯、回合流程、計分等
+ * 
+ * 新規則：
+ * 1. 繪畫階段（80秒）- 每個人抽到不同題目組合，畫其中一項
+ * 2. 猜測階段 - 依序展示每個人的畫作，先猜對加分多，猜錯扣分
+ * 3. 5 回合後結束
  */
 
 const { getRandomWords } = require('./wordCards');
@@ -13,80 +18,130 @@ const { getRandomWords } = require('./wordCards');
 function initGame(room) {
   const playerCount = room.players.length;
   
-  // 準備計分板塊（每人 5 個，分數遞減：5,4,3,2,1）
-  const scoringTokens = [5, 4, 3, 2, 1];
-  
-  // 準備加分板塊（根據人數調整）
-  const bonusTokens = [];
-  for (let i = playerCount - 1; i >= 1; i--) {
-    bonusTokens.push(i);
-  }
-
   // 初始化每位玩家的遊戲資料
   const playerData = {};
   room.players.forEach(player => {
     playerData[player.id] = {
-      scoringTokens: [...scoringTokens], // 可送出的計分板塊
-      receivedTokens: [],                 // 收到的計分板塊
-      bonusTokens: [],                    // 獲得的加分板塊
-      assignedNumber: 0,                  // 本回合分配的題目數字
-      guesses: {},                        // 對其他玩家的猜測 { playerId: number }
-      hasFinished: false,                 // 是否已完成本回合
-      wrongGuesses: 0,                    // 錯誤猜測次數（用於判定老鼠屎）
-      totalScore: 0                       // 總分
+      words: [],                  // 該玩家的題目組合（7個詞）
+      assignedNumber: 0,          // 玩家選擇要畫的題目編號（1-7）
+      guesses: {},                // 對其他玩家的猜測 { playerId: { number, timestamp } }
+      hasFinishedDrawing: false,  // 是否已完成繪圖
+      roundScore: 0,              // 本回合得分
+      totalScore: 0               // 總分
     };
   });
 
   return {
-    phase: 'waiting',      // waiting, playing, guessing, scoring, ended
+    phase: 'waiting',      // waiting, drawing, guessing, showing, scoring, ended
     round: 0,
     totalRounds: 5,
-    words: [],             // 本回合的 7 個題目詞彙
     playerData: playerData,
-    bonusTokens: bonusTokens,
-    availableBonusTokens: [],  // 本回合可領取的加分板塊
-    finishOrder: [],           // 完成順序
-    roundStartTime: null,
-    roundDuration: 90000,      // 90 秒
+    drawingDuration: 80000,     // 繪畫階段 80 秒
+    guessingDuration: 20000,    // 每個作品猜測時間 20 秒
+    currentGuessingPlayer: null, // 當前被猜測的玩家
+    guessingOrder: [],          // 猜測順序（玩家 ID 列表）
+    guessingIndex: 0,           // 目前猜測到第幾個玩家
+    guessResults: [],           // 本作品的猜測結果
     timer: null
   };
 }
 
 /**
- * 開始新回合
+ * 開始新回合（繪畫階段）
  * @param {object} room - 房間物件
  * @returns {object} 回合開始資訊
  */
 function startRound(room) {
   const gameState = room.gameState;
   gameState.round++;
-  gameState.phase = 'playing';
+  gameState.phase = 'drawing';
   
-  // 選取本回合的 7 個題目詞彙
-  gameState.words = getRandomWords(7, room.difficulty);
-  
-  // 為每位玩家分配題目數字（1-7）
-  const numbers = shuffleArray([1, 2, 3, 4, 5, 6, 7]);
+  // 為每位玩家分配不同的題目組合
+  const allPlayerWords = {};
   room.players.forEach((player, index) => {
+    // 每個玩家獲得獨立的 7 個題目
+    const words = getRandomWords(7, room.difficulty);
+    allPlayerWords[player.id] = words;
+    
     const pd = gameState.playerData[player.id];
-    pd.assignedNumber = numbers[index];
+    pd.words = words;
+    // 隨機分配要畫的題目編號（1-7）
+    pd.assignedNumber = Math.floor(Math.random() * 7) + 1;
     pd.guesses = {};
-    pd.hasFinished = false;
-    pd.wrongGuesses = 0;
+    pd.hasFinishedDrawing = false;
+    pd.roundScore = 0;
   });
 
-  // 準備本回合的加分板塊
-  const bonusCount = Math.min(room.players.length - 1, gameState.bonusTokens.length);
-  gameState.availableBonusTokens = gameState.bonusTokens.slice(0, bonusCount);
-  gameState.finishOrder = [];
-  
-  gameState.roundStartTime = Date.now();
+  // 隨機決定猜測順序
+  gameState.guessingOrder = shuffleArray(room.players.map(p => p.id));
+  gameState.guessingIndex = 0;
+  gameState.currentGuessingPlayer = null;
+  gameState.guessResults = [];
 
   return {
     round: gameState.round,
     totalRounds: gameState.totalRounds,
-    words: gameState.words,
-    duration: gameState.roundDuration
+    duration: gameState.drawingDuration,
+    playerWords: allPlayerWords  // 每個玩家的題目組合
+  };
+}
+
+/**
+ * 玩家完成繪圖
+ * @param {object} room - 房間物件
+ * @param {string} playerId - 玩家 ID
+ * @returns {object} 結果
+ */
+function playerFinishedDrawing(room, playerId) {
+  const gameState = room.gameState;
+  const playerData = gameState.playerData[playerId];
+  
+  if (playerData.hasFinishedDrawing) {
+    return { alreadyFinished: true };
+  }
+
+  playerData.hasFinishedDrawing = true;
+
+  // 檢查是否所有人都完成繪圖
+  const allFinished = room.players.every(p => 
+    gameState.playerData[p.id].hasFinishedDrawing
+  );
+
+  return {
+    success: true,
+    allFinished: allFinished
+  };
+}
+
+/**
+ * 開始猜測階段（展示下一個玩家的作品）
+ * @param {object} room - 房間物件
+ * @returns {object|null} 下一個被猜測的玩家資訊，或 null 表示猜測完成
+ */
+function startNextGuessing(room) {
+  const gameState = room.gameState;
+  
+  // 如果已經猜完所有人
+  if (gameState.guessingIndex >= gameState.guessingOrder.length) {
+    return null;
+  }
+
+  gameState.phase = 'guessing';
+  const targetPlayerId = gameState.guessingOrder[gameState.guessingIndex];
+  gameState.currentGuessingPlayer = targetPlayerId;
+  gameState.guessResults = [];
+
+  const targetPlayer = room.players.find(p => p.id === targetPlayerId);
+  const targetData = gameState.playerData[targetPlayerId];
+
+  return {
+    targetPlayerId: targetPlayerId,
+    targetPlayerName: targetPlayer.name,
+    targetPlayerColor: targetPlayer.color,
+    words: targetData.words,  // 該玩家的題目組合
+    guessingIndex: gameState.guessingIndex + 1,
+    totalPlayers: gameState.guessingOrder.length,
+    duration: gameState.guessingDuration
   };
 }
 
@@ -94,79 +149,151 @@ function startRound(room) {
  * 玩家提交猜測
  * @param {object} room - 房間物件
  * @param {string} guesserId - 猜測者 ID
- * @param {string} targetId - 被猜測者 ID
- * @param {number} guessNumber - 猜測的數字
+ * @param {number} guessNumber - 猜測的數字（1-7）
  * @returns {object} 結果
  */
-function submitGuess(room, guesserId, targetId, guessNumber) {
+function submitGuess(room, guesserId, guessNumber) {
   const gameState = room.gameState;
   
-  if (gameState.phase !== 'playing') {
+  if (gameState.phase !== 'guessing') {
     return { error: '現在不是猜測時間' };
   }
   
-  if (guesserId === targetId) {
-    return { error: '不能猜自己' };
+  const targetPlayerId = gameState.currentGuessingPlayer;
+  
+  if (guesserId === targetPlayerId) {
+    return { error: '不能猜自己的作品' };
   }
 
   const guesserData = gameState.playerData[guesserId];
   
   // 檢查是否已經猜過這個人
-  if (guesserData.guesses[targetId] !== undefined) {
-    return { error: '已經對這位玩家提交過猜測' };
+  if (guesserData.guesses[targetPlayerId] !== undefined) {
+    return { error: '你已經提交過猜測了' };
   }
 
-  guesserData.guesses[targetId] = guessNumber;
+  const timestamp = Date.now();
+  guesserData.guesses[targetPlayerId] = {
+    number: guessNumber,
+    timestamp: timestamp
+  };
+
+  // 檢查是否猜對
+  const targetData = gameState.playerData[targetPlayerId];
+  const isCorrect = guessNumber === targetData.assignedNumber;
+  
+  // 記錄猜測結果（用於排序）
+  gameState.guessResults.push({
+    guesserId: guesserId,
+    guessNumber: guessNumber,
+    isCorrect: isCorrect,
+    timestamp: timestamp
+  });
+
+  // 檢查是否所有人都猜完了
+  const otherPlayers = room.players.filter(p => p.id !== targetPlayerId);
+  const allGuessed = otherPlayers.every(p => 
+    gameState.playerData[p.id].guesses[targetPlayerId] !== undefined
+  );
 
   return { 
     success: true,
-    guesserId,
-    targetId,
-    // 不返回正確答案，等結算時才揭曉
+    isCorrect: isCorrect,
+    allGuessed: allGuessed
   };
 }
 
 /**
- * 玩家完成繪圖和猜測
+ * 結算單個作品的猜測結果
  * @param {object} room - 房間物件
- * @param {string} playerId - 玩家 ID
- * @returns {object} 結果
+ * @returns {object} 結算結果
  */
-function playerFinished(room, playerId) {
+function endCurrentGuessing(room) {
   const gameState = room.gameState;
-  const playerData = gameState.playerData[playerId];
+  const targetPlayerId = gameState.currentGuessingPlayer;
+  const targetPlayer = room.players.find(p => p.id === targetPlayerId);
+  const targetData = gameState.playerData[targetPlayerId];
   
-  if (playerData.hasFinished) {
-    return { alreadyFinished: true };
-  }
+  const correctAnswer = targetData.assignedNumber;
+  const correctWord = targetData.words[correctAnswer - 1];
 
-  playerData.hasFinished = true;
-  gameState.finishOrder.push(playerId);
+  // 按時間排序猜對的人
+  const correctGuesses = gameState.guessResults
+    .filter(r => r.isCorrect)
+    .sort((a, b) => a.timestamp - b.timestamp);
+  
+  const wrongGuesses = gameState.guessResults.filter(r => !r.isCorrect);
 
-  // 分配加分板塊
-  const finishPosition = gameState.finishOrder.length - 1;
-  if (finishPosition < gameState.availableBonusTokens.length) {
-    const bonus = gameState.availableBonusTokens[finishPosition];
-    playerData.bonusTokens.push(bonus);
-  }
+  // 計分：先猜對的得分多
+  const scoreTable = [5, 3, 2, 1]; // 第1名5分，第2名3分，第3名2分，其他1分
+  const results = [];
 
-  // 檢查是否所有人都完成
-  const allFinished = room.players.every(p => 
-    gameState.playerData[p.id].hasFinished
-  );
+  correctGuesses.forEach((guess, index) => {
+    const guesser = room.players.find(p => p.id === guess.guesserId);
+    const score = index < scoreTable.length ? scoreTable[index] : 1;
+    gameState.playerData[guess.guesserId].roundScore += score;
+    
+    results.push({
+      playerId: guess.guesserId,
+      playerName: guesser.name,
+      playerColor: guesser.color,
+      guessNumber: guess.number,
+      isCorrect: true,
+      score: score,
+      rank: index + 1
+    });
+  });
+
+  // 猜錯扣分
+  wrongGuesses.forEach(guess => {
+    const guesser = room.players.find(p => p.id === guess.guesserId);
+    const penalty = -2;
+    gameState.playerData[guess.guesserId].roundScore += penalty;
+    
+    results.push({
+      playerId: guess.guesserId,
+      playerName: guesser.name,
+      playerColor: guesser.color,
+      guessNumber: guess.number,
+      isCorrect: false,
+      score: penalty,
+      rank: null
+    });
+  });
+
+  // 沒有猜的人（不計分也不扣分）
+  const otherPlayers = room.players.filter(p => p.id !== targetPlayerId);
+  otherPlayers.forEach(player => {
+    if (!gameState.playerData[player.id].guesses[targetPlayerId]) {
+      results.push({
+        playerId: player.id,
+        playerName: player.name,
+        playerColor: player.color,
+        guessNumber: null,
+        isCorrect: false,
+        score: 0,
+        rank: null,
+        didNotGuess: true
+      });
+    }
+  });
+
+  // 移動到下一個玩家
+  gameState.guessingIndex++;
+  gameState.phase = 'showing';
 
   return {
-    success: true,
-    bonusAwarded: finishPosition < gameState.availableBonusTokens.length 
-      ? gameState.availableBonusTokens[finishPosition] 
-      : 0,
-    allFinished: allFinished,
-    finishOrder: gameState.finishOrder
+    targetPlayerId: targetPlayerId,
+    targetPlayerName: targetPlayer.name,
+    correctAnswer: correctAnswer,
+    correctWord: correctWord,
+    results: results,
+    hasMorePlayers: gameState.guessingIndex < gameState.guessingOrder.length
   };
 }
 
 /**
- * 結算回合
+ * 結算整個回合
  * @param {object} room - 房間物件
  * @returns {object} 回合結算結果
  */
@@ -175,96 +302,22 @@ function endRound(room) {
   gameState.phase = 'scoring';
 
   const results = [];
-  let maxWrongGuesses = 0;
 
-  // 處理每位玩家的猜測
+  // 計算每位玩家的回合得分並累加到總分
   room.players.forEach(player => {
-    const playerData = gameState.playerData[player.id];
-    const playerResult = {
+    const pd = gameState.playerData[player.id];
+    pd.totalScore += pd.roundScore;
+    
+    results.push({
       playerId: player.id,
       playerName: player.name,
-      assignedWord: gameState.words[playerData.assignedNumber - 1],
-      assignedNumber: playerData.assignedNumber,
-      correctGuesses: [],
-      wrongGuesses: [],
-      tokensGiven: [],
-      tokensReceived: [],
-      bonusTokens: playerData.bonusTokens.slice(-1), // 本回合獲得的加分板塊
-      roundScore: 0
-    };
-
-    // 檢查此玩家對其他人的猜測
-    Object.entries(playerData.guesses).forEach(([targetId, guessNumber]) => {
-      const targetPlayer = room.players.find(p => p.id === targetId);
-      const targetData = gameState.playerData[targetId];
-      
-      if (guessNumber === targetData.assignedNumber) {
-        // 猜對了！
-        playerResult.correctGuesses.push({
-          targetId,
-          targetName: targetPlayer.name,
-          guessedNumber: guessNumber
-        });
-        
-        // 從被猜者那裡獲得計分板塊
-        if (targetData.scoringTokens.length > 0) {
-          const token = targetData.scoringTokens.shift();
-          playerData.receivedTokens.push(token);
-          playerResult.tokensReceived.push(token);
-        }
-      } else {
-        // 猜錯了
-        playerData.wrongGuesses++;
-        playerResult.wrongGuesses.push({
-          targetId,
-          targetName: targetPlayer.name,
-          guessedNumber: guessNumber,
-          correctNumber: targetData.assignedNumber
-        });
-      }
+      playerColor: player.color,
+      roundScore: pd.roundScore,
+      totalScore: pd.totalScore
     });
-
-    maxWrongGuesses = Math.max(maxWrongGuesses, playerData.wrongGuesses);
-    results.push(playerResult);
   });
 
-  // 判定老鼠屎（猜錯最多的人）
-  const poopyPlayers = room.players.filter(p => 
-    gameState.playerData[p.id].wrongGuesses === maxWrongGuesses && maxWrongGuesses > 0
-  );
-
-  // 計算本回合得分
-  results.forEach(result => {
-    const playerData = gameState.playerData[result.playerId];
-    const isPoopy = poopyPlayers.some(p => p.id === result.playerId);
-    
-    // 收到的計分板塊 = +分
-    let score = playerData.receivedTokens.reduce((sum, t) => sum + t, 0);
-    
-    // 未送出的計分板塊 = -分
-    score -= playerData.scoringTokens.reduce((sum, t) => sum + t, 0);
-    
-    // 加分板塊處理
-    const latestBonus = playerData.bonusTokens[playerData.bonusTokens.length - 1] || 0;
-    if (isPoopy) {
-      // 老鼠屎的加分變扣分
-      score -= latestBonus;
-      result.isPoopy = true;
-    } else if (playerData.receivedTokens.length > 0 || 
-               Object.keys(playerData.guesses).length > 0) {
-      // 有參與遊戲才能獲得加分
-      score += latestBonus;
-    }
-
-    result.roundScore = score;
-    result.isPoopy = isPoopy;
-    
-    // 累加總分
-    playerData.totalScore += score;
-    result.totalScore = playerData.totalScore;
-  });
-
-  // 排序結果（本回合得分高的在前）
+  // 按回合得分排序
   results.sort((a, b) => b.roundScore - a.roundScore);
 
   // 檢查遊戲是否結束
@@ -273,20 +326,10 @@ function endRound(room) {
     gameState.phase = 'ended';
   }
 
-  // 重置玩家的計分板塊供下一回合使用
-  if (!isGameEnd) {
-    room.players.forEach(player => {
-      const pd = gameState.playerData[player.id];
-      pd.scoringTokens = [5, 4, 3, 2, 1];
-      pd.receivedTokens = [];
-    });
-  }
-
   return {
     round: gameState.round,
     results: results,
-    isGameEnd: isGameEnd,
-    poopyPlayers: poopyPlayers.map(p => ({ id: p.id, name: p.name }))
+    isGameEnd: isGameEnd
   };
 }
 
@@ -336,11 +379,10 @@ function getPlayerPrivateInfo(room, playerId) {
 
   const pd = gameState.playerData[playerId];
   return {
+    words: pd.words,
     assignedNumber: pd.assignedNumber,
-    assignedWord: gameState.words[pd.assignedNumber - 1],
-    scoringTokens: pd.scoringTokens,
-    guesses: pd.guesses,
-    hasFinished: pd.hasFinished
+    assignedWord: pd.words[pd.assignedNumber - 1],
+    hasFinishedDrawing: pd.hasFinishedDrawing
   };
 }
 
@@ -359,8 +401,10 @@ function shuffleArray(array) {
 module.exports = {
   initGame,
   startRound,
+  playerFinishedDrawing,
+  startNextGuessing,
   submitGuess,
-  playerFinished,
+  endCurrentGuessing,
   endRound,
   getFinalRanking,
   getPlayerPrivateInfo

@@ -1,5 +1,6 @@
 /**
  * Pictomania 線上版 - 主程式
+ * 新流程：繪畫階段 → 依序猜測階段
  */
 
 // ===================================
@@ -109,55 +110,42 @@ function setupSocketHandlers() {
     showScreen('lobby-screen');
   });
 
-  // 遊戲開始
-  socket.on('gameStarted', (data) => {
-    game.startGame(data);
+  // 繪畫階段開始
+  socket.on('drawingPhaseStarted', (data) => {
+    game.startDrawingPhase(data);
     showScreen('game-screen');
-    showToast('遊戲開始！', 'success');
+    showToast(`第 ${data.round} 回合 - 開始繪畫！(80秒)`, 'success');
   });
 
-  // 回合開始
-  socket.on('roundStarted', (data) => {
-    game.startNewRound(data);
-    showScreen('game-screen');
-    showToast(`第 ${data.round} 回合開始！`, 'success');
+  // 玩家完成繪圖
+  socket.on('playerFinishedDrawing', (data) => {
+    game.playerFinishedDrawing(data);
   });
 
-  // 接收繪圖資料
-  socket.on('draw', (data) => {
-    game.handleRemoteDraw(data.playerId, data.drawData);
-  });
-
-  // 清除畫布
-  socket.on('clearCanvas', (data) => {
-    game.handleRemoteClear(data.playerId);
+  // 猜測階段開始
+  socket.on('guessingPhaseStarted', (data) => {
+    game.startGuessingPhase(data);
+    showToast(`現在猜測 ${data.targetPlayerName} 的作品！`, 'info');
   });
 
   // 猜測已提交
   socket.on('guessSubmitted', (data) => {
-    // 不需要特別處理，已在 submitGuess 中處理
+    game.guessSubmitted(data.isCorrect);
   });
 
-  // 有人猜了你
-  socket.on('someoneGuessedYou', (data) => {
-    showToast(`${data.guesserName} 猜了你的圖！`, 'info');
-  });
-
-  // 玩家完成
-  socket.on('playerFinished', (data) => {
-    game.playerFinished(data);
+  // 猜測結束（顯示結果）
+  socket.on('guessingEnded', (data) => {
+    game.showGuessingResult(data);
   });
 
   // 回合結束
   socket.on('roundEnded', (data) => {
     game.showRoundResult(data);
-    showScreen('result-screen');
   });
 
   // 遊戲結束
   socket.on('gameEnded', (data) => {
     game.showFinalResult(data.rankings);
-    showScreen('end-screen');
   });
 }
 
@@ -225,26 +213,14 @@ function setupUIHandlers() {
     socket.leaveRoom();
   });
 
-  // 完成回合
-  document.getElementById('finish-round-btn').addEventListener('click', () => {
-    socket.finishRound();
+  // 完成繪圖
+  document.getElementById('finish-drawing-btn').addEventListener('click', () => {
+    socket.send('finishDrawing', {});
   });
 
   // 下一回合
   document.getElementById('next-round-btn').addEventListener('click', () => {
     socket.nextRound();
-  });
-
-  // 關閉猜測視窗
-  document.querySelector('.close-modal-btn').addEventListener('click', () => {
-    document.getElementById('guess-modal').style.display = 'none';
-  });
-
-  // 點擊視窗外關閉
-  document.getElementById('guess-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'guess-modal') {
-      e.target.style.display = 'none';
-    }
   });
 
   // 再玩一次

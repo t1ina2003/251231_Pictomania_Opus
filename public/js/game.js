@@ -1,5 +1,6 @@
 /**
  * 遊戲邏輯管理
+ * 新流程：繪畫階段 → 依序猜測階段
  */
 class GameManager {
   constructor() {
@@ -7,10 +8,10 @@ class GameManager {
     this.playerId = null;
     this.gameState = null;
     this.myCanvas = null;
-    this.remoteCanvases = {};
-    this.guesses = {};
+    this.displayCanvas = null;
     this.timer = null;
     this.timeRemaining = 0;
+    this.hasGuessed = false;
   }
 
   /**
@@ -90,27 +91,30 @@ class GameManager {
   }
 
   /**
-   * 開始遊戲
+   * 開始繪畫階段
    */
-  startGame(data) {
+  startDrawingPhase(data) {
     this.gameState = {
+      phase: 'drawing',
       round: data.round,
       totalRounds: data.totalRounds,
-      words: data.words,
       privateInfo: data.privateInfo,
       duration: data.duration,
-      players: data.players
+      players: data.players || this.room.players
     };
     
-    this.guesses = {};
-    this.initGameUI();
+    this.initDrawingUI();
     this.startTimer(data.duration);
   }
 
   /**
-   * 初始化遊戲 UI
+   * 初始化繪畫 UI
    */
-  initGameUI() {
+  initDrawingUI() {
+    // 更新標題
+    document.getElementById('game-phase-title').textContent = '✏️ 繪畫階段';
+    document.getElementById('game-phase-subtitle').textContent = '畫出你的題目，讓其他人猜！';
+
     // 初始化自己的畫布
     if (!this.myCanvas) {
       this.myCanvas = new CanvasManager('my-canvas');
@@ -128,16 +132,17 @@ class GameManager {
     document.getElementById('current-round').textContent = this.gameState.round;
     document.getElementById('total-rounds').textContent = this.gameState.totalRounds;
 
-    // 更新題目板
+    // 更新題目板（顯示自己的題目組合）
     this.updateWordBoard();
 
-    // 建立其他玩家的畫布
-    this.createOtherCanvases();
+    // 顯示繪畫區域，隱藏猜測區域
+    document.getElementById('drawing-section').style.display = 'block';
+    document.getElementById('guessing-section').style.display = 'none';
 
     // 重置完成按鈕
-    const finishBtn = document.getElementById('finish-round-btn');
+    const finishBtn = document.getElementById('finish-drawing-btn');
     finishBtn.disabled = false;
-    finishBtn.textContent = '完成！';
+    finishBtn.textContent = '完成繪圖！';
 
     // 綁定工具事件
     this.bindToolEvents();
@@ -155,7 +160,7 @@ class GameManager {
 
     // 題目列表
     const wordsList = document.getElementById('words-list');
-    wordsList.innerHTML = this.gameState.words.map((word, index) => {
+    wordsList.innerHTML = info.words.map((word, index) => {
       const number = index + 1;
       const isMyWord = number === info.assignedNumber;
       
@@ -166,50 +171,6 @@ class GameManager {
         </div>
       `;
     }).join('');
-  }
-
-  /**
-   * 建立其他玩家的畫布
-   */
-  createOtherCanvases() {
-    const container = document.getElementById('others-canvases');
-    container.innerHTML = '';
-    this.remoteCanvases = {};
-
-    const otherPlayers = this.gameState.players.filter(p => p.id !== this.playerId);
-    
-    otherPlayers.forEach(player => {
-      const div = document.createElement('div');
-      div.className = 'other-player-canvas';
-      div.id = `player-canvas-${player.id}`;
-      
-      div.innerHTML = `
-        <div class="other-player-header">
-          <div class="other-player-name">
-            <span class="other-player-color" style="background-color: ${player.color}"></span>
-            <span>${player.name}</span>
-          </div>
-          <button class="guess-btn" data-player-id="${player.id}" data-player-name="${player.name}">
-            猜測
-          </button>
-        </div>
-        <div class="other-canvas-wrapper">
-          <canvas width="400" height="400"></canvas>
-        </div>
-      `;
-      
-      container.appendChild(div);
-      
-      const canvas = div.querySelector('canvas');
-      this.remoteCanvases[player.id] = new RemoteCanvasManager(canvas);
-    });
-
-    // 綁定猜測按鈕事件
-    container.querySelectorAll('.guess-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.openGuessModal(btn.dataset.playerId, btn.dataset.playerName);
-      });
-    });
   }
 
   /**
@@ -243,76 +204,329 @@ class GameManager {
   }
 
   /**
-   * 處理遠端繪圖
+   * 玩家完成繪圖
    */
-  handleRemoteDraw(playerId, drawData) {
-    const remoteCanvas = this.remoteCanvases[playerId];
-    if (remoteCanvas) {
-      remoteCanvas.draw(drawData);
-    }
-  }
-
-  /**
-   * 處理遠端清除畫布
-   */
-  handleRemoteClear(playerId) {
-    const remoteCanvas = this.remoteCanvases[playerId];
-    if (remoteCanvas) {
-      remoteCanvas.clear();
-    }
-  }
-
-  /**
-   * 開啟猜測視窗
-   */
-  openGuessModal(targetId, targetName) {
-    // 檢查是否已猜過
-    if (this.guesses[targetId] !== undefined) {
-      showToast('你已經猜過這位玩家了', 'warning');
-      return;
-    }
-
-    const modal = document.getElementById('guess-modal');
-    document.getElementById('guess-target-name').textContent = targetName;
+  playerFinishedDrawing(data) {
+    showToast(`${data.playerName} 完成繪圖了！`, 'info');
     
-    // 生成 1-7 選項
-    const optionsContainer = document.getElementById('guess-options');
-    optionsContainer.innerHTML = this.gameState.words.map((word, index) => {
-      const number = index + 1;
-      return `
-        <button class="guess-option-btn" data-number="${number}">
-          ${number}
+    // 如果是自己
+    if (data.playerId === this.playerId) {
+      const finishBtn = document.getElementById('finish-drawing-btn');
+      finishBtn.disabled = true;
+      finishBtn.textContent = '已完成';
+    }
+  }
+
+  /**
+   * 開始猜測階段
+   */
+  startGuessingPhase(data) {
+    if (this.timer) {
+      clearInterval(this.timer);
+    }
+
+    this.gameState.phase = 'guessing';
+    this.gameState.currentTarget = {
+      playerId: data.targetPlayerId,
+      playerName: data.targetPlayerName,
+      playerColor: data.targetPlayerColor,
+      words: data.words
+    };
+    this.hasGuessed = false;
+
+    // 更新 UI
+    document.getElementById('game-phase-title').textContent = '🔍 猜測階段';
+    document.getElementById('game-phase-subtitle').textContent = 
+      `猜猜 ${data.targetPlayerName} 畫的是什麼？ (${data.guessingIndex}/${data.totalPlayers})`;
+
+    // 顯示猜測區域，隱藏繪畫區域
+    document.getElementById('drawing-section').style.display = 'none';
+    document.getElementById('guessing-section').style.display = 'block';
+
+    // 如果是自己的作品，顯示等待訊息
+    if (data.targetPlayerId === this.playerId) {
+      document.getElementById('guess-content').innerHTML = `
+        <div class="waiting-message">
+          <p>這是你的作品！</p>
+          <p>等待其他玩家猜測...</p>
+        </div>
+      `;
+    } else {
+      // 顯示題目選項讓玩家猜測
+      this.showGuessingOptions(data);
+    }
+
+    // 重播繪圖
+    this.replayDrawing(data.drawings);
+
+    this.startTimer(data.duration);
+  }
+
+  /**
+   * 顯示猜測選項
+   */
+  showGuessingOptions(data) {
+    const container = document.getElementById('guess-content');
+    container.innerHTML = `
+      <p class="guess-prompt">選擇你認為 ${data.targetPlayerName} 畫的題目：</p>
+      <div class="guess-options">
+        ${data.words.map((word, index) => {
+          const number = index + 1;
+          return `
+            <button class="guess-option-btn" data-number="${number}">
+              <span class="guess-number">${number}</span>
+              <span class="guess-word">${word}</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+      <div id="guess-feedback" class="guess-feedback"></div>
+    `;
+
+    // 綁定猜測按鈕事件
+    container.querySelectorAll('.guess-option-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (this.hasGuessed) return;
+        
+        const guessNumber = parseInt(btn.dataset.number);
+        socket.submitGuess(guessNumber);
+        
+        // 禁用所有按鈕
+        container.querySelectorAll('.guess-option-btn').forEach(b => {
+          b.disabled = true;
+        });
+        btn.classList.add('selected');
+      });
+    });
+  }
+
+  /**
+   * 重播繪圖
+   */
+  replayDrawing(drawings) {
+    const canvas = document.getElementById('display-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // 清除畫布
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (!drawings || drawings.length === 0) return;
+
+    // 快速重播繪圖
+    let index = 0;
+    const replaySpeed = 5; // 每幀繪製的筆畫數
+    
+    const replay = () => {
+      for (let i = 0; i < replaySpeed && index < drawings.length; i++, index++) {
+        const data = drawings[index];
+        if (data.type === 'line') {
+          ctx.beginPath();
+          ctx.moveTo(data.fromX, data.fromY);
+          ctx.lineTo(data.toX, data.toY);
+          ctx.strokeStyle = data.color;
+          ctx.lineWidth = data.size;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.stroke();
+          ctx.closePath();
+        }
+      }
+      
+      if (index < drawings.length) {
+        requestAnimationFrame(replay);
+      }
+    };
+    
+    replay();
+  }
+
+  /**
+   * 猜測提交回饋
+   */
+  guessSubmitted(isCorrect) {
+    this.hasGuessed = true;
+    const feedback = document.getElementById('guess-feedback');
+    if (feedback) {
+      if (isCorrect) {
+        feedback.innerHTML = '<span class="correct">✓ 答對了！等待其他玩家...</span>';
+      } else {
+        feedback.innerHTML = '<span class="wrong">✗ 答錯了！等待結算...</span>';
+      }
+    }
+  }
+
+  /**
+   * 顯示猜測結果
+   */
+  showGuessingResult(data) {
+    if (this.timer) {
+      clearInterval(this.timer);
+    }
+
+    this.gameState.phase = 'showing';
+
+    document.getElementById('game-phase-title').textContent = '📊 結果揭曉';
+    document.getElementById('game-phase-subtitle').textContent = 
+      `${data.targetPlayerName} 畫的是「${data.correctWord}」(#${data.correctAnswer})`;
+
+    const container = document.getElementById('guess-content');
+    
+    // 排序結果（正確的在前）
+    const sortedResults = [...data.results].sort((a, b) => {
+      if (a.isCorrect && !b.isCorrect) return -1;
+      if (!a.isCorrect && b.isCorrect) return 1;
+      if (a.rank && b.rank) return a.rank - b.rank;
+      return 0;
+    });
+
+    container.innerHTML = `
+      <div class="guessing-results">
+        <div class="correct-answer">
+          正確答案：<strong>#${data.correctAnswer} ${data.correctWord}</strong>
+        </div>
+        <div class="results-list">
+          ${sortedResults.map(r => {
+            let statusIcon = '';
+            let statusClass = '';
+            let scoreText = '';
+            
+            if (r.didNotGuess) {
+              statusIcon = '⏭️';
+              statusClass = 'skipped';
+              scoreText = '未猜測';
+            } else if (r.isCorrect) {
+              statusIcon = '✓';
+              statusClass = 'correct';
+              scoreText = `+${r.score} 分 (第 ${r.rank} 名)`;
+            } else {
+              statusIcon = '✗';
+              statusClass = 'wrong';
+              scoreText = `${r.score} 分`;
+            }
+            
+            return `
+              <div class="result-item ${statusClass}">
+                <div class="result-player">
+                  <span class="result-avatar" style="background-color: ${r.playerColor}">
+                    ${r.playerName.charAt(0)}
+                  </span>
+                  <span class="result-name">${r.playerName}</span>
+                </div>
+                <div class="result-guess">
+                  ${r.didNotGuess ? '' : `猜 #${r.guessNumber}`}
+                </div>
+                <div class="result-status">
+                  <span class="status-icon">${statusIcon}</span>
+                  <span class="status-text">${scoreText}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      ${data.hasMorePlayers ? `
+        <button id="next-guessing-btn" class="btn btn-primary" ${this.room.hostId !== this.playerId ? 'disabled' : ''}>
+          ${this.room.hostId === this.playerId ? '下一位玩家' : '等待房主'}
         </button>
+      ` : `
+        <button id="show-round-result-btn" class="btn btn-primary" ${this.room.hostId !== this.playerId ? 'disabled' : ''}>
+          ${this.room.hostId === this.playerId ? '查看回合結果' : '等待房主'}
+        </button>
+      `}
+    `;
+
+    // 綁定按鈕事件
+    const nextBtn = document.getElementById('next-guessing-btn');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        socket.send('nextGuessing', {});
+      });
+    }
+
+    const resultBtn = document.getElementById('show-round-result-btn');
+    if (resultBtn) {
+      resultBtn.addEventListener('click', () => {
+        socket.send('nextGuessing', {});
+      });
+    }
+  }
+
+  /**
+   * 顯示回合結果
+   */
+  showRoundResult(data) {
+    if (this.timer) {
+      clearInterval(this.timer);
+    }
+
+    // 更新結果畫面
+    document.getElementById('result-round').textContent = data.round;
+    
+    // 生成結果表格
+    const resultsTable = document.getElementById('results-table');
+    resultsTable.innerHTML = data.results.map((result, index) => {
+      const scoreClass = result.roundScore >= 0 ? 'positive' : 'negative';
+      const scorePrefix = result.roundScore >= 0 ? '+' : '';
+      
+      return `
+        <div class="result-row">
+          <div class="result-rank">${index + 1}</div>
+          <div class="result-player">
+            <div class="result-player-avatar" style="background-color: ${result.playerColor}">
+              ${result.playerName.charAt(0).toUpperCase()}
+            </div>
+            <div class="result-player-info">
+              <div class="result-player-name">${result.playerName}</div>
+            </div>
+          </div>
+          <div class="result-score-info">
+            <div class="result-score ${scoreClass}">${scorePrefix}${result.roundScore}</div>
+            <div class="result-round-score">總分: ${result.totalScore}</div>
+          </div>
+        </div>
       `;
     }).join('');
 
-    // 綁定選項點擊事件
-    optionsContainer.querySelectorAll('.guess-option-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const guessNumber = parseInt(btn.dataset.number);
-        this.submitGuess(targetId, guessNumber);
-        modal.style.display = 'none';
-      });
-    });
+    // 下一回合按鈕
+    const nextRoundBtn = document.getElementById('next-round-btn');
+    if (data.isGameEnd) {
+      nextRoundBtn.style.display = 'none';
+    } else {
+      nextRoundBtn.style.display = 'block';
+      const isHost = this.room.hostId === this.playerId;
+      nextRoundBtn.disabled = !isHost;
+      nextRoundBtn.textContent = isHost ? '下一回合' : '等待房主';
+    }
 
-    modal.style.display = 'flex';
+    showScreen('result-screen');
   }
 
   /**
-   * 提交猜測
+   * 顯示最終結果
    */
-  submitGuess(targetId, guessNumber) {
-    socket.submitGuess(targetId, guessNumber);
-    this.guesses[targetId] = guessNumber;
+  showFinalResult(rankings) {
+    const container = document.getElementById('final-rankings');
     
-    // 更新猜測按鈕狀態
-    const guessBtn = document.querySelector(`[data-player-id="${targetId}"]`);
-    if (guessBtn) {
-      guessBtn.disabled = true;
-      guessBtn.textContent = `已猜 #${guessNumber}`;
-    }
-    
-    showToast(`已提交猜測: #${guessNumber}`, 'success');
+    container.innerHTML = rankings.map((player, index) => {
+      const positionClass = index === 0 ? 'gold' : (index === 1 ? 'silver' : (index === 2 ? 'bronze' : ''));
+      const positionIcon = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : `${player.rank}`));
+      
+      return `
+        <div class="ranking-item ${index === 0 ? 'first' : ''}">
+          <div class="ranking-position ${positionClass}">${positionIcon}</div>
+          <div class="ranking-player">
+            <div class="ranking-avatar" style="background-color: ${player.color}">
+              ${player.playerName.charAt(0).toUpperCase()}
+            </div>
+            <div class="ranking-name">${player.playerName}</div>
+          </div>
+          <div class="ranking-score">${player.totalScore} 分</div>
+        </div>
+      `;
+    }).join('');
+
+    showScreen('end-screen');
   }
 
   /**
@@ -343,9 +557,12 @@ class GameManager {
     const timerText = document.getElementById('timer-text');
     const timerProgress = document.getElementById('timer-progress');
     
+    if (!timerText || !timerProgress) return;
+    
     timerText.textContent = Math.max(0, this.timeRemaining);
     
-    const totalDuration = this.gameState.duration / 1000;
+    const totalDuration = this.gameState.phase === 'drawing' ? 
+      (this.gameState.duration / 1000) : 20;
     const percentage = (this.timeRemaining / totalDuration) * 100;
     timerProgress.style.width = `${percentage}%`;
     
@@ -358,143 +575,17 @@ class GameManager {
   }
 
   /**
-   * 玩家完成回合
-   */
-  playerFinished(data) {
-    showToast(`${data.playerName} 完成了！${data.bonusAwarded ? ` +${data.bonusAwarded} 加分` : ''}`, 'info');
-    
-    // 如果是自己
-    if (data.playerId === this.playerId) {
-      const finishBtn = document.getElementById('finish-round-btn');
-      finishBtn.disabled = true;
-      finishBtn.textContent = '已完成';
-    }
-  }
-
-  /**
-   * 顯示回合結果
-   */
-  showRoundResult(data) {
-    if (this.timer) {
-      clearInterval(this.timer);
-    }
-
-    // 更新結果畫面
-    document.getElementById('result-round').textContent = data.round;
-    
-    // 顯示老鼠屎
-    const poopyAnnouncement = document.getElementById('poopy-announcement');
-    if (data.poopyPlayers && data.poopyPlayers.length > 0) {
-      poopyAnnouncement.style.display = 'flex';
-      document.getElementById('poopy-names').textContent = 
-        data.poopyPlayers.map(p => p.name).join(', ');
-    } else {
-      poopyAnnouncement.style.display = 'none';
-    }
-
-    // 生成結果表格
-    const resultsTable = document.getElementById('results-table');
-    resultsTable.innerHTML = data.results.map((result, index) => {
-      const scoreClass = result.roundScore >= 0 ? 'positive' : 'negative';
-      const scorePrefix = result.roundScore >= 0 ? '+' : '';
-      
-      return `
-        <div class="result-row">
-          <div class="result-rank">${index + 1}</div>
-          <div class="result-player">
-            <div class="result-player-avatar" style="background-color: ${this.getPlayerColor(result.playerId)}">
-              ${result.playerName.charAt(0).toUpperCase()}
-            </div>
-            <div class="result-player-info">
-              <div class="result-player-name">
-                ${result.playerName}
-                ${result.isPoopy ? ' 🐭' : ''}
-              </div>
-              <div class="result-player-word">畫的是: ${result.assignedWord}</div>
-            </div>
-          </div>
-          <div class="result-score-info">
-            <div class="result-score ${scoreClass}">${scorePrefix}${result.roundScore}</div>
-            <div class="result-round-score">總分: ${result.totalScore}</div>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    // 下一回合按鈕
-    const nextRoundBtn = document.getElementById('next-round-btn');
-    if (data.isGameEnd) {
-      nextRoundBtn.style.display = 'none';
-    } else {
-      nextRoundBtn.style.display = 'block';
-      const isHost = this.room.hostId === this.playerId;
-      nextRoundBtn.disabled = !isHost;
-      nextRoundBtn.textContent = isHost ? '下一回合' : '等待房主';
-    }
-  }
-
-  /**
-   * 開始新回合
-   */
-  startNewRound(data) {
-    this.gameState.round = data.round;
-    this.gameState.totalRounds = data.totalRounds;
-    this.gameState.words = data.words;
-    this.gameState.privateInfo = data.privateInfo;
-    this.gameState.duration = data.duration;
-    
-    this.guesses = {};
-    this.initGameUI();
-    this.startTimer(data.duration);
-  }
-
-  /**
-   * 顯示最終結果
-   */
-  showFinalResult(rankings) {
-    const container = document.getElementById('final-rankings');
-    
-    container.innerHTML = rankings.map((player, index) => {
-      const positionClass = index === 0 ? 'gold' : (index === 1 ? 'silver' : (index === 2 ? 'bronze' : ''));
-      const positionIcon = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : `${player.rank}`));
-      
-      return `
-        <div class="ranking-item ${index === 0 ? 'first' : ''}">
-          <div class="ranking-position ${positionClass}">${positionIcon}</div>
-          <div class="ranking-player">
-            <div class="ranking-avatar" style="background-color: ${player.color}">
-              ${player.playerName.charAt(0).toUpperCase()}
-            </div>
-            <div class="ranking-name">${player.playerName}</div>
-          </div>
-          <div class="ranking-score">${player.totalScore} 分</div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  /**
-   * 獲取玩家顏色
-   */
-  getPlayerColor(playerId) {
-    const player = this.room?.players.find(p => p.id === playerId);
-    return player?.color || '#6366f1';
-  }
-
-  /**
    * 重置遊戲
    */
   reset() {
     this.room = null;
     this.gameState = null;
-    this.guesses = {};
     if (this.timer) {
       clearInterval(this.timer);
     }
     if (this.myCanvas) {
       this.myCanvas.clear(false);
     }
-    this.remoteCanvases = {};
   }
 }
 

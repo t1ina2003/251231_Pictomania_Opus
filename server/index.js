@@ -1,5 +1,10 @@
 /**
  * Pictomania 線上版 - 伺服器主程式
+ * 
+ * 新規則流程：
+ * 1. 繪畫階段（80秒）- 每個人抽到不同題目組合，畫其中一項
+ * 2. 猜測階段 - 依序展示每個人的畫作，先猜對加分多，猜錯扣分
+ * 3. 5 回合後結束
  */
 
 const express = require('express');
@@ -39,6 +44,9 @@ app.get('/health', (req, res) => {
 
 // WebSocket 連線管理
 const clients = new Map(); // ws -> { id, roomCode, playerName }
+
+// 儲存玩家的繪圖資料
+const playerDrawings = new Map(); // playerId -> [drawData]
 
 /**
  * 生成唯一連線 ID
@@ -105,12 +113,16 @@ function handleMessage(ws, message) {
         handleClearCanvas(ws, clientInfo);
         break;
         
+      case 'finishDrawing':
+        handleFinishDrawing(ws, clientInfo);
+        break;
+        
       case 'submitGuess':
         handleSubmitGuess(ws, clientInfo, data);
         break;
         
-      case 'finishRound':
-        handleFinishRound(ws, clientInfo);
+      case 'nextGuessing':
+        handleNextGuessing(ws, clientInfo);
         break;
         
       case 'nextRound':
@@ -239,28 +251,30 @@ function handleStartGame(ws, clientInfo) {
     return;
   }
 
+  // 清除之前的繪圖資料
+  room.players.forEach(p => playerDrawings.delete(p.id));
+
   // 初始化遊戲
   room.gameState = gameManager.initGame(room);
   
-  // 開始第一回合
+  // 開始第一回合（繪畫階段）
   const roundInfo = gameManager.startRound(room);
 
-  // 通知所有玩家遊戲開始
+  // 通知所有玩家遊戲開始（進入繪畫階段）
   room.players.forEach(player => {
     const privateInfo = gameManager.getPlayerPrivateInfo(room, player.id);
     sendToPlayer(player.id, {
-      type: 'gameStarted',
+      type: 'drawingPhaseStarted',
       round: roundInfo.round,
       totalRounds: roundInfo.totalRounds,
-      words: roundInfo.words,
       privateInfo: privateInfo,
       duration: roundInfo.duration,
       players: room.players
     });
   });
 
-  // 設定回合計時器
-  startRoundTimer(room);
+  // 設定繪畫階段計時器
+  startDrawingTimer(room);
 }
 
 /**
@@ -268,14 +282,15 @@ function handleStartGame(ws, clientInfo) {
  */
 function handleDraw(ws, clientInfo, data) {
   const room = roomManager.getRoom(clientInfo.roomCode);
-  if (!room || !room.gameState || room.gameState.phase !== 'playing') return;
+  if (!room || !room.gameState || room.gameState.phase !== 'drawing') return;
 
-  // 廣播繪圖資料給其他玩家
-  broadcastToRoom(clientInfo.roomCode, {
-    type: 'draw',
-    playerId: clientInfo.id,
-    drawData: data.drawData
-  }, clientInfo.id);
+  // 儲存繪圖資料
+  if (!playerDrawings.has(clientInfo.id)) {
+    playerDrawings.set(clientInfo.id, []);
+  }
+  playerDrawings.get(clientInfo.id).push(data.drawData);
+
+  // 繪畫階段不需要即時同步給其他玩家
 }
 
 /**
@@ -283,12 +298,37 @@ function handleDraw(ws, clientInfo, data) {
  */
 function handleClearCanvas(ws, clientInfo) {
   const room = roomManager.getRoom(clientInfo.roomCode);
-  if (!room || !room.gameState || room.gameState.phase !== 'playing') return;
+  if (!room || !room.gameState || room.gameState.phase !== 'drawing') return;
 
+  // 清除該玩家的繪圖資料
+  playerDrawings.set(clientInfo.id, []);
+}
+
+/**
+ * 處理玩家完成繪圖
+ */
+function handleFinishDrawing(ws, clientInfo) {
+  const room = roomManager.getRoom(clientInfo.roomCode);
+  if (!room || !room.gameState) return;
+
+  const result = gameManager.playerFinishedDrawing(room, clientInfo.id);
+  
+  if (result.alreadyFinished) {
+    return;
+  }
+
+  // 通知所有玩家誰完成了
   broadcastToRoom(clientInfo.roomCode, {
-    type: 'clearCanvas',
-    playerId: clientInfo.id
-  }, clientInfo.id);
+    type: 'playerFinishedDrawing',
+    playerId: clientInfo.id,
+    playerName: clientInfo.playerName
+  });
+
+  // 如果所有人都完成繪圖，進入猜測階段
+  if (result.allFinished) {
+    clearTimer(room);
+    startGuessingPhase(room);
+  }
 }
 
 /**
@@ -298,7 +338,7 @@ function handleSubmitGuess(ws, clientInfo, data) {
   const room = roomManager.getRoom(clientInfo.roomCode);
   if (!room) return;
 
-  const result = gameManager.submitGuess(room, clientInfo.id, data.targetId, data.guessNumber);
+  const result = gameManager.submitGuess(room, clientInfo.id, data.guessNumber);
   
   if (result.error) {
     ws.send(JSON.stringify({ type: 'error', message: result.error }));
@@ -307,44 +347,59 @@ function handleSubmitGuess(ws, clientInfo, data) {
 
   ws.send(JSON.stringify({
     type: 'guessSubmitted',
-    targetId: data.targetId,
-    guessNumber: data.guessNumber
+    isCorrect: result.isCorrect
   }));
 
-  // 通知被猜測的玩家（不透露猜測內容）
-  sendToPlayer(data.targetId, {
-    type: 'someoneGuessedYou',
-    guesserId: clientInfo.id,
-    guesserName: clientInfo.playerName
-  });
+  // 如果所有人都猜完了，結算這個作品
+  if (result.allGuessed) {
+    clearTimer(room);
+    endCurrentGuessing(room);
+  }
 }
 
 /**
- * 處理玩家完成回合
+ * 處理進入下一個玩家的猜測
  */
-function handleFinishRound(ws, clientInfo) {
+function handleNextGuessing(ws, clientInfo) {
   const room = roomManager.getRoom(clientInfo.roomCode);
   if (!room || !room.gameState) return;
 
-  const result = gameManager.playerFinished(room, clientInfo.id);
-  
-  if (result.alreadyFinished) {
+  if (room.hostId !== clientInfo.id) {
+    ws.send(JSON.stringify({ type: 'error', message: '只有房主可以繼續' }));
     return;
   }
 
-  // 通知所有玩家誰完成了
-  broadcastToRoom(clientInfo.roomCode, {
-    type: 'playerFinished',
-    playerId: clientInfo.id,
-    playerName: clientInfo.playerName,
-    bonusAwarded: result.bonusAwarded,
-    finishOrder: result.finishOrder
-  });
+  // 開始猜測下一個玩家
+  const nextGuessing = gameManager.startNextGuessing(room);
+  
+  if (nextGuessing) {
+    // 還有玩家要猜
+    const targetPlayerId = nextGuessing.targetPlayerId;
+    const drawings = playerDrawings.get(targetPlayerId) || [];
 
-  // 如果所有人都完成，結算回合
-  if (result.allFinished) {
-    clearRoundTimer(room);
-    endCurrentRound(room);
+    broadcastToRoom(room.code, {
+      type: 'guessingPhaseStarted',
+      ...nextGuessing,
+      drawings: drawings
+    });
+
+    startGuessingTimer(room);
+  } else {
+    // 所有人都猜完了，結算回合
+    const roundResult = gameManager.endRound(room);
+    
+    broadcastToRoom(room.code, {
+      type: 'roundEnded',
+      ...roundResult
+    });
+
+    if (roundResult.isGameEnd) {
+      const rankings = gameManager.getFinalRanking(room);
+      broadcastToRoom(room.code, {
+        type: 'gameEnded',
+        rankings: rankings
+      });
+    }
   }
 }
 
@@ -365,22 +420,24 @@ function handleNextRound(ws, clientInfo) {
     return;
   }
 
-  // 開始新回合
+  // 清除之前的繪圖資料
+  room.players.forEach(p => playerDrawings.delete(p.id));
+
+  // 開始新回合（繪畫階段）
   const roundInfo = gameManager.startRound(room);
 
   room.players.forEach(player => {
     const privateInfo = gameManager.getPlayerPrivateInfo(room, player.id);
     sendToPlayer(player.id, {
-      type: 'roundStarted',
+      type: 'drawingPhaseStarted',
       round: roundInfo.round,
       totalRounds: roundInfo.totalRounds,
-      words: roundInfo.words,
       privateInfo: privateInfo,
       duration: roundInfo.duration
     });
   });
 
-  startRoundTimer(room);
+  startDrawingTimer(room);
 }
 
 /**
@@ -399,49 +456,71 @@ function handleChat(ws, clientInfo, data) {
 }
 
 /**
- * 開始回合計時器
+ * 開始繪畫階段計時器
  */
-function startRoundTimer(room) {
+function startDrawingTimer(room) {
   const gameState = room.gameState;
   
   gameState.timer = setTimeout(() => {
-    // 時間到，強制結算
+    // 時間到，強制結束繪畫階段
     room.players.forEach(player => {
-      gameManager.playerFinished(room, player.id);
+      gameManager.playerFinishedDrawing(room, player.id);
     });
-    endCurrentRound(room);
-  }, gameState.roundDuration);
+    startGuessingPhase(room);
+  }, gameState.drawingDuration);
 }
 
 /**
- * 清除回合計時器
+ * 開始猜測階段
  */
-function clearRoundTimer(room) {
-  if (room.gameState && room.gameState.timer) {
-    clearTimeout(room.gameState.timer);
-    room.gameState.timer = null;
+function startGuessingPhase(room) {
+  const nextGuessing = gameManager.startNextGuessing(room);
+  
+  if (nextGuessing) {
+    const targetPlayerId = nextGuessing.targetPlayerId;
+    const drawings = playerDrawings.get(targetPlayerId) || [];
+
+    broadcastToRoom(room.code, {
+      type: 'guessingPhaseStarted',
+      ...nextGuessing,
+      drawings: drawings
+    });
+
+    startGuessingTimer(room);
   }
 }
 
 /**
- * 結算當前回合
+ * 開始猜測計時器
  */
-function endCurrentRound(room) {
-  const result = gameManager.endRound(room);
+function startGuessingTimer(room) {
+  const gameState = room.gameState;
+  
+  gameState.timer = setTimeout(() => {
+    // 時間到，結算當前猜測
+    endCurrentGuessing(room);
+  }, gameState.guessingDuration);
+}
 
-  // 廣播回合結果
+/**
+ * 結算當前猜測
+ */
+function endCurrentGuessing(room) {
+  const result = gameManager.endCurrentGuessing(room);
+
   broadcastToRoom(room.code, {
-    type: 'roundEnded',
+    type: 'guessingEnded',
     ...result
   });
+}
 
-  // 如果遊戲結束，發送最終排名
-  if (result.isGameEnd) {
-    const rankings = gameManager.getFinalRanking(room);
-    broadcastToRoom(room.code, {
-      type: 'gameEnded',
-      rankings: rankings
-    });
+/**
+ * 清除計時器
+ */
+function clearTimer(room) {
+  if (room.gameState && room.gameState.timer) {
+    clearTimeout(room.gameState.timer);
+    room.gameState.timer = null;
   }
 }
 
@@ -484,6 +563,11 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     const clientInfo = clients.get(ws);
     console.log(`玩家斷線: ${clientInfo?.id}`);
+
+    // 清除繪圖資料
+    if (clientInfo?.id) {
+      playerDrawings.delete(clientInfo.id);
+    }
 
     // 處理玩家離開房間
     if (clientInfo?.roomCode) {

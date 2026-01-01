@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
   <!-- 載入畫面 -->
   <div id="loading-screen" class="screen active">
@@ -26,7 +28,7 @@
     <div class="lobby-container">
       <h1 class="game-title">🎨 妙筆神猜</h1>
       <p class="subtitle">與朋友一起繪畫猜謎！</p>
-      
+
       <div class="lobby-actions">
         <div class="input-group">
           <label for="player-name">你的名字</label>
@@ -42,27 +44,26 @@
             <button class="diff-btn" data-difficulty="mixed">混合</button>
           </div>
         </div>
-        
+
         <button id="create-room-btn" class="btn btn-primary">建立房間</button>
-        
+
         <div class="divider">
           <span>或</span>
         </div>
-        
+
         <div class="input-group">
           <label for="room-code">房間碼</label>
           <input type="text" id="room-code" placeholder="輸入 6 位數房間碼" maxlength="6">
         </div>
         <button id="join-room-btn" class="btn btn-secondary">加入房間</button>
       </div>
-      
+
       <div class="rules-summary">
         <h3>📖 遊戲規則</h3>
         <ul>
-          <li>每位玩家根據自己的題目畫圖</li>
-          <li>同時猜測其他玩家畫的是什麼</li>
-          <li>猜對得分，猜錯最多的成為「老鼠屎」！</li>
-          <li>5 回合後分數最高者獲勝</li>
+          <li>繪畫階段：每人有不同題目，80秒內畫完</li>
+          <li>猜測階段：依序展示每人作品，搶先猜對得高分</li>
+          <li>猜錯扣分，5 回合後總分最高者獲勝！</li>
         </ul>
       </div>
     </div>
@@ -75,16 +76,16 @@
         <h2>房間 <span id="room-code-display">------</span></h2>
         <button id="copy-code-btn" class="btn btn-small">複製房間碼</button>
       </div>
-      
+
       <div class="players-list" id="players-list">
         <!-- 玩家列表將動態生成 -->
       </div>
-      
+
       <div class="room-info">
         <p>難度：<span id="room-difficulty">混合</span></p>
         <p>需要 3-6 位玩家才能開始遊戲</p>
       </div>
-      
+
       <div class="room-actions">
         <button id="start-game-btn" class="btn btn-primary" disabled>開始遊戲</button>
         <button id="leave-room-btn" class="btn btn-danger">離開房間</button>
@@ -104,30 +105,34 @@
           <div class="timer-bar">
             <div class="timer-progress" id="timer-progress"></div>
           </div>
-          <span class="timer-text" id="timer-text">90</span>
-        </div>
-        <button id="finish-round-btn" class="btn btn-success">完成！</button>
-      </div>
-
-      <!-- 題目板 -->
-      <div class="word-board" id="word-board">
-        <div class="word-board-header">
-          <span class="your-word-label">你的題目：</span>
-          <span class="your-word" id="your-word">---</span>
-          <span class="your-number" id="your-number">#?</span>
-        </div>
-        <div class="words-list" id="words-list">
-          <!-- 7 個題目將動態生成 -->
+          <span class="timer-text" id="timer-text">80</span>
         </div>
       </div>
 
-      <!-- 主遊戲區域 -->
-      <div class="game-main">
-        <!-- 左側：自己的畫布 -->
+      <!-- 階段標題 -->
+      <div class="phase-header">
+        <h2 id="game-phase-title">✏️ 繪畫階段</h2>
+        <p id="game-phase-subtitle">畫出你的題目，讓其他人猜！</p>
+      </div>
+
+      <!-- 繪畫區域 -->
+      <div id="drawing-section" class="game-section">
+        <!-- 題目板 -->
+        <div class="word-board" id="word-board">
+          <div class="word-board-header">
+            <span class="your-word-label">你的題目：</span>
+            <span class="your-word" id="your-word">---</span>
+            <span class="your-number" id="your-number">#?</span>
+          </div>
+          <div class="words-list" id="words-list">
+            <!-- 7 個題目將動態生成 -->
+          </div>
+        </div>
+
+        <!-- 畫布區域 -->
         <div class="my-canvas-section">
-          <h3>我的畫板</h3>
           <div class="canvas-wrapper">
-            <canvas id="my-canvas" width="400" height="400"></canvas>
+            <canvas id="my-canvas" width="500" height="500"></canvas>
           </div>
           <div class="drawing-tools">
             <div class="tool-group">
@@ -139,14 +144,24 @@
               <input type="color" id="brush-color" value="#000000" title="顏色">
               <input type="range" id="brush-size" min="2" max="20" value="4" title="粗細">
             </div>
+            <button id="finish-drawing-btn" class="btn btn-success">完成繪圖！</button>
           </div>
         </div>
+      </div>
 
-        <!-- 右側：其他玩家的畫布 -->
-        <div class="others-canvas-section">
-          <h3>其他玩家</h3>
-          <div class="others-canvases" id="others-canvases">
-            <!-- 其他玩家的畫布將動態生成 -->
+      <!-- 猜測區域 -->
+      <div id="guessing-section" class="game-section" style="display: none;">
+        <div class="guessing-layout">
+          <!-- 展示畫布 -->
+          <div class="display-canvas-section">
+            <div class="canvas-wrapper large">
+              <canvas id="display-canvas" width="500" height="500"></canvas>
+            </div>
+          </div>
+
+          <!-- 猜測內容 -->
+          <div class="guess-panel" id="guess-content">
+            <!-- 動態生成猜測選項 -->
           </div>
         </div>
       </div>
@@ -160,17 +175,12 @@
       <div class="result-round-info">
         第 <span id="result-round">1</span> 回合結束
       </div>
-      
-      <div class="poopy-announcement" id="poopy-announcement" style="display: none;">
-        <span class="poopy-icon">🐭</span>
-        <span class="poopy-text">老鼠屎：<span id="poopy-names">---</span></span>
-      </div>
-      
+
       <div class="results-table" id="results-table">
         <!-- 結果將動態生成 -->
       </div>
-      
-      <button id="next-round-btn" class="btn btn-primary" style="display: none;">下一回合</button>
+
+      <button id="next-round-btn" class="btn btn-primary">下一回合</button>
     </div>
   </div>
 
@@ -178,27 +188,15 @@
   <div id="end-screen" class="screen">
     <div class="end-container">
       <h1 class="end-title">🏆 遊戲結束！</h1>
-      
+
       <div class="final-rankings" id="final-rankings">
         <!-- 最終排名將動態生成 -->
       </div>
-      
+
       <div class="end-actions">
         <button id="play-again-btn" class="btn btn-primary">再玩一次</button>
         <button id="back-to-lobby-btn" class="btn btn-secondary">回到大廳</button>
       </div>
-    </div>
-  </div>
-
-  <!-- 猜測彈窗 -->
-  <div id="guess-modal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <h3>猜測 <span id="guess-target-name">玩家</span> 的圖</h3>
-      <p>選擇你認為的題目編號：</p>
-      <div class="guess-options" id="guess-options">
-        <!-- 1-7 選項按鈕 -->
-      </div>
-      <button class="btn btn-secondary close-modal-btn">取消</button>
     </div>
   </div>
 
@@ -210,4 +208,5 @@
   <script src="js/game.js"></script>
   <script src="js/app.js"></script>
 </body>
+
 </html>

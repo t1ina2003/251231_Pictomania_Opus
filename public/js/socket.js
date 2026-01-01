@@ -163,15 +163,8 @@ class SocketManager {
   /**
    * 提交猜測
    */
-  submitGuess(targetId, guessNumber) {
-    this.send('submitGuess', { targetId, guessNumber });
-  }
-
-  /**
-   * 完成回合
-   */
-  finishRound() {
-    this.send('finishRound');
+  submitGuess(guessNumber) {
+    this.send('submitGuess', { guessNumber });
   }
 
   /**
