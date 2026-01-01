@@ -351,6 +351,14 @@ function handleSubmitGuess(ws, clientInfo, data) {
     isCorrect: result.isCorrect
   }));
 
+  // 廣播猜測狀態更新給所有玩家（供觀察員更新顯示）
+  broadcastToRoom(clientInfo.roomCode, {
+    type: 'guessStatusUpdate',
+    playerId: clientInfo.id,
+    playerName: clientInfo.playerName,
+    hasGuessed: true
+  });
+
   // 如果所有人都猜完了，結算這個作品
   if (result.allGuessed) {
     clearTimer(room);

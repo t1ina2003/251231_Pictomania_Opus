@@ -517,6 +517,54 @@ input[type="number"]:focus {
   color: var(--success);
 }
 
+.status-icon.guessed {
+  color: var(--success);
+}
+
+/* 觀察員猜測狀態面板 */
+.observer-guessing-panel {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-secondary);
+}
+
+.observer-guessing-panel h3 {
+  font-size: 24px;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.observer-guessing-panel>p {
+  margin-bottom: 24px;
+}
+
+.guessing-status-list {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.guessing-status-list h4 {
+  margin-bottom: 16px;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.guessing-status-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
+.guessing-status-item:last-child {
+  margin-bottom: 0;
+}
+
 .player-avatar {
   width: 40px;
   height: 40px;

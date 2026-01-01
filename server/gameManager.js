@@ -177,11 +177,22 @@ function submitGuess(room, guesserId, guessNumber) {
   
   const targetPlayerId = gameState.currentGuessingPlayer;
   
+  // 檢查是否為觀察員（觀察員不能猜測）
+  const guesser = room.players.find(p => p.id === guesserId);
+  if (guesser && guesser.isObserver) {
+    return { error: '觀察員不能參與猜測' };
+  }
+  
   if (guesserId === targetPlayerId) {
     return { error: '不能猜自己的作品' };
   }
 
   const guesserData = gameState.playerData[guesserId];
+  
+  // 如果沒有 playerData（觀察員），也不能猜測
+  if (!guesserData) {
+    return { error: '觀察員不能參與猜測' };
+  }
   
   // 檢查是否已經猜過這個人
   if (guesserData.guesses[targetPlayerId] !== undefined) {
@@ -206,10 +217,10 @@ function submitGuess(room, guesserId, guessNumber) {
     timestamp: timestamp
   });
 
-  // 檢查是否所有人都猜完了
-  const otherPlayers = room.players.filter(p => p.id !== targetPlayerId);
-  const allGuessed = otherPlayers.every(p => 
-    gameState.playerData[p.id].guesses[targetPlayerId] !== undefined
+  // 檢查是否所有參與者都猜完了（排除觀察員和被猜測者）
+  const activePlayers = room.players.filter(p => !p.isObserver && p.id !== targetPlayerId);
+  const allGuessed = activePlayers.every(p => 
+    gameState.playerData[p.id] && gameState.playerData[p.id].guesses[targetPlayerId] !== undefined
   );
 
   return { 

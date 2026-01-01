@@ -300,6 +300,10 @@ class GameManager {
     };
     this.hasGuessed = false;
 
+    // 檢查是否為觀察員
+    const myPlayer = this.room.players.find(p => p.id === this.playerId);
+    const isObserver = myPlayer && myPlayer.isObserver;
+
     // 更新 UI
     document.getElementById('game-phase-title').textContent = '🔍 猜測階段';
     document.getElementById('game-phase-subtitle').textContent = 
@@ -309,8 +313,11 @@ class GameManager {
     document.getElementById('drawing-section').style.display = 'none';
     document.getElementById('guessing-section').style.display = 'block';
 
-    // 如果是自己的作品，顯示等待訊息
-    if (data.targetPlayerId === this.playerId) {
+    // 如果是觀察員，顯示玩家猜測狀態概覽
+    if (isObserver) {
+      this.showObserverGuessingStatus(data);
+    } else if (data.targetPlayerId === this.playerId) {
+      // 如果是自己的作品，顯示等待訊息
       document.getElementById('guess-content').innerHTML = `
         <div class="waiting-message">
           <p>這是你的作品！</p>
@@ -326,6 +333,34 @@ class GameManager {
     this.replayDrawing(data.drawings);
 
     this.startTimer(data.duration);
+  }
+
+  /**
+   * 觀察員視角：顯示玩家猜測狀態
+   */
+  showObserverGuessingStatus(data) {
+    const container = document.getElementById('guess-content');
+    // 獲取需要猜測的玩家（排除觀察員與被猜測者）
+    const guessers = this.room.players.filter(p => 
+      !p.isObserver && p.id !== data.targetPlayerId
+    );
+
+    container.innerHTML = `
+      <div class="observer-guessing-panel">
+        <h3>👀 觀察員模式</h3>
+        <p>正在展示 <strong>${data.targetPlayerName}</strong> 的作品</p>
+        <div class="guessing-status-list">
+          <h4>玩家猜測狀態</h4>
+          ${guessers.map(p => `
+            <div class="guessing-status-item" id="guess-status-${p.id}">
+              <span class="status-avatar" style="background-color: ${p.color}">${p.name.charAt(0)}</span>
+              <span class="status-name">${p.name}</span>
+              <span class="status-icon">⏳ 思考中</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
   }
 
   /**
@@ -364,6 +399,20 @@ class GameManager {
         btn.classList.add('selected');
       });
     });
+  }
+
+  /**
+   * 更新猜測狀態（供觀察員顯示）
+   */
+  updateGuessStatus(data) {
+    const statusElement = document.getElementById(`guess-status-${data.playerId}`);
+    if (statusElement) {
+      const statusIcon = statusElement.querySelector('.status-icon');
+      if (statusIcon) {
+        statusIcon.textContent = '✅ 已猜測';
+        statusIcon.classList.add('guessed');
+      }
+    }
   }
 
   /**

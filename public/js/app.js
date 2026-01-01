@@ -143,6 +143,11 @@ function setupSocketHandlers() {
     }
   });
 
+  // 猜測狀態更新（供觀察員更新顯示）
+  socket.on('guessStatusUpdate', (data) => {
+    game.updateGuessStatus(data);
+  });
+
   // 猜測結束（顯示結果）
   socket.on('guessingEnded', (data) => {
     game.showGuessingResult(data);
