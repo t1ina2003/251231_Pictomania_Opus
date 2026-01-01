@@ -331,9 +331,12 @@ function endRound(room) {
 
   const results = [];
 
-  // 計算每位玩家的回合得分並累加到總分
+  // 計算每位玩家的回合得分並累加到總分（排除觀察員）
   room.players.forEach(player => {
     const pd = gameState.playerData[player.id];
+    // 觀察員沒有 playerData，跳過
+    if (!pd) return;
+    
     pd.totalScore += pd.roundScore;
     
     results.push({
@@ -369,15 +372,18 @@ function endRound(room) {
 function getFinalRanking(room) {
   const gameState = room.gameState;
   
-  const rankings = room.players.map(player => {
-    const pd = gameState.playerData[player.id];
-    return {
-      playerId: player.id,
-      playerName: player.name,
-      color: player.color,
-      totalScore: pd.totalScore
-    };
-  });
+  // 只包含有 playerData 的玩家（排除觀察員）
+  const rankings = room.players
+    .filter(player => gameState.playerData[player.id])
+    .map(player => {
+      const pd = gameState.playerData[player.id];
+      return {
+        playerId: player.id,
+        playerName: player.name,
+        color: player.color,
+        totalScore: pd.totalScore
+      };
+    });
 
   rankings.sort((a, b) => b.totalScore - a.totalScore);
 
