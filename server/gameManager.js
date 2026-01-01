@@ -394,6 +394,12 @@ function getPlayerPrivateInfo(room, playerId) {
   }
 
   const pd = gameState.playerData[playerId];
+  
+  // 觀察員沒有 playerData，返回 null
+  if (!pd) {
+    return null;
+  }
+
   return {
     words: pd.words,
     assignedNumber: pd.assignedNumber,
