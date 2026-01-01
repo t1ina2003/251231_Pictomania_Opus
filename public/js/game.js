@@ -72,9 +72,10 @@ class GameManager {
     container.innerHTML = this.room.players.map(player => {
       const isMe = player.id === this.playerId;
       const isHost = player.isHost;
+      const isObserver = player.isObserver;
       
       return `
-        <div class="player-card ${isHost ? 'is-host' : ''} ${isMe ? 'is-me' : ''}">
+        <div class="player-card ${isHost ? 'is-host' : ''} ${isMe ? 'is-me' : ''} ${isObserver ? 'is-observer' : ''}">
           <div class="player-avatar" style="background-color: ${player.color}">
             ${player.name.charAt(0).toUpperCase()}
           </div>
@@ -82,6 +83,7 @@ class GameManager {
             <div class="player-name">${player.name}</div>
             <div class="player-badge">
               ${isHost ? '👑 房主' : ''}
+              ${isObserver ? '👀 觀察員' : ''}
               ${isMe ? '(你)' : ''}
             </div>
           </div>
@@ -111,41 +113,105 @@ class GameManager {
    * 初始化繪畫 UI
    */
   initDrawingUI() {
+    // 檢查是否為觀察員
+    const myPlayer = this.room.players.find(p => p.id === this.playerId);
+    const isObserver = myPlayer && myPlayer.isObserver;
+
     // 更新標題
     document.getElementById('game-phase-title').textContent = '✏️ 繪畫階段';
-    document.getElementById('game-phase-subtitle').textContent = '畫出你的題目，讓其他人猜！';
-
-    // 初始化自己的畫布
-    if (!this.myCanvas) {
-      this.myCanvas = new CanvasManager('my-canvas');
-      this.myCanvas.onDraw = (drawData) => {
-        socket.sendDraw(drawData);
-      };
-      this.myCanvas.onClear = () => {
-        socket.clearCanvas();
-      };
+    
+    if (isObserver) {
+      // 觀察員視角
+      document.getElementById('game-phase-subtitle').textContent = '等待其他玩家完成繪畫...';
+      
+      // 顯示觀察員等待畫面
+      document.getElementById('drawing-section').innerHTML = `
+        <div class="observer-waiting">
+          <h3>👀 觀察員模式</h3>
+          <p>你是觀察員，正在等待其他玩家完成繪畫</p>
+          <p>繪畫結束後將進入猜測階段</p>
+          <div class="players-drawing-status">
+            ${this.room.players.filter(p => !p.isObserver).map(p => `
+              <div class="player-status">
+                <span class="status-avatar" style="background-color: ${p.color}">${p.name.charAt(0)}</span>
+                <span class="status-name">${p.name}</span>
+                <span class="status-icon" id="status-${p.id}">✏️ 繪圖中</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      document.getElementById('guessing-section').style.display = 'none';
     } else {
-      this.myCanvas.clear(false);
+      // 一般玩家視角
+      document.getElementById('game-phase-subtitle').textContent = '畫出你的題目，讓其他人猜！';
+
+      // 確保繪畫區域有正確的 HTML 結構
+      const drawingSection = document.getElementById('drawing-section');
+      if (!drawingSection.querySelector('#my-canvas')) {
+        drawingSection.innerHTML = `
+          <div class="word-board" id="word-board">
+            <div class="word-board-header">
+              <span class="your-word-label">你的題目：</span>
+              <span class="your-word" id="your-word">---</span>
+              <span class="your-number" id="your-number">#?</span>
+            </div>
+            <div class="words-list" id="words-list"></div>
+          </div>
+          <div class="my-canvas-section">
+            <div class="canvas-wrapper">
+              <canvas id="my-canvas" width="500" height="500"></canvas>
+            </div>
+            <div class="drawing-tools">
+              <div class="tool-group">
+                <button class="tool-btn active" data-tool="brush" title="畫筆">✏️</button>
+                <button class="tool-btn" data-tool="eraser" title="橡皮擦">🧹</button>
+                <button class="tool-btn" data-tool="clear" title="清除全部">🗑️</button>
+              </div>
+              <div class="tool-group">
+                <input type="color" id="brush-color" value="#000000" title="顏色">
+                <input type="range" id="brush-size" min="2" max="20" value="4" title="粗細">
+              </div>
+              <button id="finish-drawing-btn" class="btn btn-success">完成繪圖！</button>
+            </div>
+          </div>
+        `;
+      }
+
+      // 初始化自己的畫布
+      if (!this.myCanvas) {
+        this.myCanvas = new CanvasManager('my-canvas');
+        this.myCanvas.onDraw = (drawData) => {
+          socket.sendDraw(drawData);
+        };
+        this.myCanvas.onClear = () => {
+          socket.clearCanvas();
+        };
+      } else {
+        this.myCanvas.clear(false);
+      }
+
+      // 更新回合資訊
+      document.getElementById('current-round').textContent = this.gameState.round;
+      document.getElementById('total-rounds').textContent = this.gameState.totalRounds;
+
+      // 更新題目板
+      this.updateWordBoard();
+
+      // 重置完成按鈕
+      const finishBtn = document.getElementById('finish-drawing-btn');
+      if (finishBtn) {
+        finishBtn.disabled = false;
+        finishBtn.textContent = '完成繪圖！';
+      }
+
+      // 綁定工具事件
+      this.bindToolEvents();
     }
-
-    // 更新回合資訊
-    document.getElementById('current-round').textContent = this.gameState.round;
-    document.getElementById('total-rounds').textContent = this.gameState.totalRounds;
-
-    // 更新題目板（顯示自己的題目組合）
-    this.updateWordBoard();
 
     // 顯示繪畫區域，隱藏猜測區域
     document.getElementById('drawing-section').style.display = 'block';
     document.getElementById('guessing-section').style.display = 'none';
-
-    // 重置完成按鈕
-    const finishBtn = document.getElementById('finish-drawing-btn');
-    finishBtn.disabled = false;
-    finishBtn.textContent = '完成繪圖！';
-
-    // 綁定工具事件
-    this.bindToolEvents();
   }
 
   /**

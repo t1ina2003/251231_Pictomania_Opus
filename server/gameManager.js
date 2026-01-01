@@ -6,9 +6,17 @@
  * 1. 繪畫階段（80秒）- 每個人抽到不同題目組合，畫其中一項
  * 2. 猜測階段 - 依序展示每個人的畫作，先猜對加分多，猜錯扣分
  * 3. 5 回合後結束
+ * 4. 房主可選擇作為觀察員，不參與遊戲只負責主持
  */
 
 const { getRandomWords } = require('./wordCards');
+
+/**
+ * 獲取參與遊戲的玩家（排除觀察員）
+ */
+function getActivePlayers(room) {
+  return room.players.filter(p => !p.isObserver);
+}
 
 /**
  * 初始化遊戲狀態
@@ -16,11 +24,11 @@ const { getRandomWords } = require('./wordCards');
  * @returns {object} 初始遊戲狀態
  */
 function initGame(room) {
-  const playerCount = room.players.length;
+  const activePlayers = getActivePlayers(room);
   
-  // 初始化每位玩家的遊戲資料
+  // 初始化每位參與玩家的遊戲資料
   const playerData = {};
-  room.players.forEach(player => {
+  activePlayers.forEach(player => {
     playerData[player.id] = {
       words: [],                  // 該玩家的題目組合（7個詞）
       assignedNumber: 0,          // 玩家選擇要畫的題目編號（1-7）
@@ -36,6 +44,7 @@ function initGame(room) {
     round: 0,
     totalRounds: 5,
     playerData: playerData,
+    activePlayers: activePlayers.map(p => p.id),  // 參與遊戲的玩家 ID
     drawingDuration: 80000,     // 繪畫階段 80 秒
     guessingDuration: 20000,    // 每個作品猜測時間 20 秒
     currentGuessingPlayer: null, // 當前被猜測的玩家
@@ -53,12 +62,13 @@ function initGame(room) {
  */
 function startRound(room) {
   const gameState = room.gameState;
+  const activePlayers = getActivePlayers(room);
   gameState.round++;
   gameState.phase = 'drawing';
   
-  // 為每位玩家分配不同的題目組合
+  // 為每位參與玩家分配不同的題目組合
   const allPlayerWords = {};
-  room.players.forEach((player, index) => {
+  activePlayers.forEach((player, index) => {
     // 每個玩家獲得獨立的 7 個題目
     const words = getRandomWords(7, room.difficulty);
     allPlayerWords[player.id] = words;
@@ -72,8 +82,8 @@ function startRound(room) {
     pd.roundScore = 0;
   });
 
-  // 隨機決定猜測順序
-  gameState.guessingOrder = shuffleArray(room.players.map(p => p.id));
+  // 隨機決定猜測順序（只包含參與玩家）
+  gameState.guessingOrder = shuffleArray(activePlayers.map(p => p.id));
   gameState.guessingIndex = 0;
   gameState.currentGuessingPlayer = null;
   gameState.guessResults = [];
@@ -96,14 +106,20 @@ function playerFinishedDrawing(room, playerId) {
   const gameState = room.gameState;
   const playerData = gameState.playerData[playerId];
   
+  // 觀察員不需要處理繪圖完成
+  if (!playerData) {
+    return { isObserver: true };
+  }
+  
   if (playerData.hasFinishedDrawing) {
     return { alreadyFinished: true };
   }
 
   playerData.hasFinishedDrawing = true;
 
-  // 檢查是否所有人都完成繪圖
-  const allFinished = room.players.every(p => 
+  // 檢查是否所有參與玩家都完成繪圖
+  const activePlayers = getActivePlayers(room);
+  const allFinished = activePlayers.every(p => 
     gameState.playerData[p.id].hasFinishedDrawing
   );
 

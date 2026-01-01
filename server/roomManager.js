@@ -23,17 +23,19 @@ function generateRoomCode() {
  * @param {string} difficulty - 難度設定
  * @returns {object} 房間資訊
  */
-function createRoom(hostId, hostName, difficulty = 'mixed') {
+function createRoom(hostId, hostName, difficulty = 'mixed', hostIsObserver = false) {
   const roomCode = generateRoomCode();
   const room = {
     code: roomCode,
     hostId: hostId,
+    hostIsObserver: hostIsObserver,
     difficulty: difficulty,
     players: [{
       id: hostId,
       name: hostName,
       color: getPlayerColor(0),
       isHost: true,
+      isObserver: hostIsObserver,
       isReady: false,
       score: 0
     }],
@@ -72,6 +74,7 @@ function joinRoom(roomCode, playerId, playerName) {
     name: playerName,
     color: getPlayerColor(playerIndex),
     isHost: false,
+    isObserver: false,
     isReady: false,
     score: 0
   });

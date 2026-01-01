@@ -166,13 +166,14 @@ function setupUIHandlers() {
   document.getElementById('create-room-btn').addEventListener('click', () => {
     const playerName = document.getElementById('player-name').value.trim();
     const difficulty = document.querySelector('.diff-btn.active').dataset.difficulty;
+    const isObserver = document.getElementById('observer-mode').checked;
     
     if (!playerName) {
       showToast('請輸入你的名字', 'warning');
       return;
     }
     
-    socket.createRoom(playerName, difficulty);
+    socket.createRoom(playerName, difficulty, isObserver);
   });
 
   // 加入房間

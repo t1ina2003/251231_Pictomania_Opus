@@ -146,16 +146,17 @@ function handleMessage(ws, message) {
  * 處理建立房間
  */
 function handleCreateRoom(ws, clientInfo, data) {
-  const { playerName, difficulty } = data;
+  const { playerName, difficulty, isObserver } = data;
   
   if (!playerName || playerName.trim().length === 0) {
     ws.send(JSON.stringify({ type: 'error', message: '請輸入玩家名稱' }));
     return;
   }
 
-  const room = roomManager.createRoom(clientInfo.id, playerName.trim(), difficulty || 'mixed');
+  const room = roomManager.createRoom(clientInfo.id, playerName.trim(), difficulty || 'mixed', isObserver || false);
   clientInfo.roomCode = room.code;
   clientInfo.playerName = playerName.trim();
+  clientInfo.isObserver = isObserver || false;
 
   ws.send(JSON.stringify({
     type: 'roomCreated',

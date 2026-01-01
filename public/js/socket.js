@@ -121,8 +121,8 @@ class SocketManager {
   /**
    * 建立房間
    */
-  createRoom(playerName, difficulty) {
-    this.send('createRoom', { playerName, difficulty });
+  createRoom(playerName, difficulty, isObserver = false) {
+    this.send('createRoom', { playerName, difficulty, isObserver });
   }
 
   /**
