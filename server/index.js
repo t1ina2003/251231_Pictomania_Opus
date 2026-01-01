@@ -246,8 +246,8 @@ function handleStartGame(ws, clientInfo) {
     return;
   }
 
-  if (room.players.length < 3) {
-    ws.send(JSON.stringify({ type: 'error', message: '至少需要 3 位玩家才能開始' }));
+  if (room.players.length < 2) {
+    ws.send(JSON.stringify({ type: 'error', message: '至少需要 2 位玩家才能開始' }));
     return;
   }
 

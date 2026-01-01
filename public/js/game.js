@@ -54,10 +54,10 @@ class GameManager {
     const startBtn = document.getElementById('start-game-btn');
     if (startBtn) {
       const isHost = this.room.hostId === this.playerId;
-      const hasEnoughPlayers = this.room.players.length >= 3;
+      const hasEnoughPlayers = this.room.players.length >= 2;
       startBtn.disabled = !isHost || !hasEnoughPlayers;
       startBtn.textContent = isHost ? 
-        (hasEnoughPlayers ? '開始遊戲' : `等待玩家 (${this.room.players.length}/3)`) : 
+        (hasEnoughPlayers ? '開始遊戲' : `等待玩家 (${this.room.players.length}/2)`) : 
         '等待房主開始';
     }
   }
