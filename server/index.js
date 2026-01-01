@@ -14,8 +14,23 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// 靜態檔案服務
-app.use(express.static(path.join(__dirname, '../public')));
+// 設定正確的 MIME types
+express.static.mime.define({
+  'text/css': ['css'],
+  'application/javascript': ['js'],
+  'text/javascript': ['js']
+});
+
+// 靜態檔案服務 - 設定正確的 MIME type
+app.use(express.static(path.join(__dirname, '../public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
 
 // 健康檢查端點（供 Render 使用）
 app.get('/health', (req, res) => {
