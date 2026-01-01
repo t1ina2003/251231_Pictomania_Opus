@@ -288,10 +288,11 @@ function endCurrentGuessing(room) {
     });
   });
 
-  // 沒有猜的人（不計分也不扣分）
-  const otherPlayers = room.players.filter(p => p.id !== targetPlayerId);
+  // 沒有猜的人（排除觀察員，不計分也不扣分）
+  const otherPlayers = room.players.filter(p => p.id !== targetPlayerId && !p.isObserver);
   otherPlayers.forEach(player => {
-    if (!gameState.playerData[player.id].guesses[targetPlayerId]) {
+    const pd = gameState.playerData[player.id];
+    if (pd && !pd.guesses[targetPlayerId]) {
       results.push({
         playerId: player.id,
         playerName: player.name,

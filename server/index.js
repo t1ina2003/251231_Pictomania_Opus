@@ -545,7 +545,8 @@ function sanitizeRoom(room) {
       id: p.id,
       name: p.name,
       color: p.color,
-      isHost: p.isHost
+      isHost: p.isHost,
+      isObserver: p.isObserver
     })),
     gameState: room.gameState ? {
       phase: room.gameState.phase,
